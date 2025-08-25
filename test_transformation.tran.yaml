@@ -1,0 +1,297 @@
+type: "transformation"
+version: "1.0"
+pipeline:
+  components:
+    bank_transaction_input_table:
+      type: "table-input"
+      parameters:
+        componentName: "bank_transaction_input_table"
+        database: "DEMO_DATABASE"
+        schema: "DEMO_SCHEMA"
+        targetTable: "TRANSACTIONS"
+        columnNames:
+        - "TRANS_ID"
+        - "ACCOUNT_ID"
+        - "`DATE`"
+        - "`TYPE`"
+        - "OPERATION"
+        - "AMOUNT"
+        - "BALANCE"
+        - "PURPOSE"
+        - "BANK"
+        - "ACCOUNT_PARTERN_ID"
+        timeOffset:
+    Aggregate_account_id:
+      type: "aggregate"
+      sources:
+      - "bank_transaction_input_table"
+      parameters:
+        componentName: "Aggregate_account_id"
+        groupings:
+        - "ACCOUNT_ID"
+        aggregations:
+        - - "TRANS_ID"
+          - "Count Distinct"
+        - - "BALANCE"
+          - "Sum"
+        groupingType: "Group By"
+    Txn_Year:
+      type: "calculator"
+      sources:
+      - "bank_transaction_input_table"
+      parameters:
+        componentName: "Txn_Year"
+        includeInputColumns: "Yes"
+        calculations:
+        - - "year(\"`DATE`\")"
+          - "Year"
+    calculate_Trxn_Bank:
+      type: "calculator"
+      sources:
+      - "bank_transaction_input_table"
+      parameters:
+        componentName: "calculate_Trxn_Bank"
+        includeInputColumns: "Yes"
+        calculations:
+        - - "MONTH(\"`DATE`\")"
+          - "Txn_Month"
+        - - "QUARTER(\"`DATE`\")"
+          - "Txn_Quarter"
+        - - "DAY(\"`DATE`\")"
+          - "Txn_Day"
+    next_year_amount:
+      type: "lead-lag"
+      sources:
+      - "bank_transaction_input_table"
+      parameters:
+        componentName: "next_year_amount"
+        includeInputColumns: "Yes"
+        partitionData:
+        - "ACCOUNT_ID"
+        orderingsWithinPartitions:
+        - - "`DATE`"
+          - "Descending"
+        functions:
+        - - "Lead"
+          - "AMOUNT"
+          - "1"
+          - "Next_year_amount"
+        ignoreNulls: "Yes"
+    Previous_year_trxn:
+      type: "lead-lag"
+      sources:
+      - "bank_transaction_input_table"
+      parameters:
+        componentName: "Previous_year_trxn"
+        includeInputColumns: "Yes"
+        partitionData:
+        - "ACCOUNT_ID"
+        orderingsWithinPartitions:
+        - - "`DATE`"
+          - "Descending"
+        functions:
+        - - "Lag"
+          - "AMOUNT"
+          - "1"
+          - "Previous_year_trnx"
+        ignoreNulls: "Yes"
+    Aggregate_Bank:
+      type: "aggregate"
+      sources:
+      - "calculate_Trxn_Bank"
+      parameters:
+        componentName: "Aggregate_Bank"
+        groupings:
+        - "BANK"
+        - "Txn_Month"
+        - "Txn_Quarter"
+        - "Txn_Day"
+        aggregations:
+        - - "TRANS_ID"
+          - "Count Distinct"
+        - - "BALANCE"
+          - "Max"
+        - - "BALANCE"
+          - "Min"
+        - - "BALANCE"
+          - "Average"
+        - - "BALANCE"
+          - "Sum"
+        groupingType: "Group By"
+    calculate_balance:
+      type: "calculator"
+      sources:
+      - "Aggregate_Bank"
+      parameters:
+        componentName: "calculate_balance"
+        includeInputColumns: "Yes"
+        calculations:
+        - - "CAST(CAST(\"sum_BALANCE\"  AS NUMERIC(16,0)) AS bigint)"
+          - "ROUND_TOT_BALANCE"
+    Rename:
+      type: "rename"
+      sources:
+      - "calculate_balance"
+      parameters:
+        componentName: "Rename"
+        columnMapping:
+        - - "count_distinct_TRANS_ID"
+          - "Distinct Trnx_ID"
+        - - "max_BALANCE"
+          - "Maxx BALANCE"
+        - - "min_BALANCE"
+          - "Minn BALANCE"
+        - - "avg_BALANCE"
+          - "Avgg BALANCE"
+        - - "sum_BALANCE"
+          - "Summ BALANCE"
+        - - "BANK"
+          - "BANK"
+        - - "Txn_Month"
+          - "Month"
+        - - "Txn_Quarter"
+          - "Quarter"
+        - - "Txn_Day"
+          - "Day"
+        - - "ROUND_TOT_BALANCE"
+          - "ROUND TOTAL BALANCE"
+        includeInputColumns: "Yes"
+    Rounding off Balance:
+      type: "calculator"
+      sources:
+      - "Rename"
+      parameters:
+        componentName: "Rounding off Balance"
+        includeInputColumns: "No"
+        calculations:
+        - - "\"Distinct Trnx_ID\""
+          - "Distinct Trnx_ID"
+        - - "round(\"Maxx BALANCE\",0)"
+          - "Max_Balance"
+        - - "ROUND(\"Minn BALANCE\",0)"
+          - "Min_Balance"
+        - - "ROUND(\"Avgg BALANCE\",0)"
+          - "Avg_BALANCE"
+        - - "ROUND(\"Summ BALANCE\",0)"
+          - "Sum Balance"
+        - - "\"BANK\""
+          - "Bank"
+        - - "\"Month\""
+          - "Month"
+        - - "\"Quarter\""
+          - "Quarter"
+        - - "\"Day\""
+          - "Day"
+        - - "round(\"ROUND TOTAL BALANCE\",0)"
+          - "ROUND TOTAL BALANCE"
+    Aggregate:
+      type: "aggregate"
+      sources:
+      - "Txn_Year"
+      parameters:
+        componentName: "Aggregate"
+        groupings:
+        - "TRANS_ID"
+        - "BALANCE"
+        aggregations:
+        - - "TRANS_ID"
+          - "Count Distinct"
+        - - "BALANCE"
+          - "Sum"
+        groupingType: "Group By"
+    Convert Type Date to Time_Stamp:
+      type: "convert-type"
+      sources:
+      - "bank_transaction_input_table"
+      parameters:
+        componentName: "Convert Type Date to Time_Stamp"
+        conversions:
+        - - "`DATE`"
+          - "TIMESTAMP"
+          - ""
+          - ""
+        - - "BALANCE"
+          - "FLOAT"
+          - "10"
+          - "2"
+    Rewrite Table:
+      type: "rewrite-table"
+      sources:
+      - "Rounding off Balance"
+      parameters:
+        componentName: "Rewrite Table"
+        warehouse: "DEMO_WAREHOUSE"
+        database: "DEMO_DATABASE"
+        schema: "DEMO_SCHEMA"
+        targetTable: "Trnx"
+        orderBy:
+      postProcessing:
+        updateOutputMessage:
+        updateScalarVariables:
+design:
+  components:
+    bank_transaction_input_table:
+      position:
+        x: 0
+        "y": 0
+      tempMetlId: 1
+    Aggregate_account_id:
+      position:
+        x: 120
+        "y": -130
+      tempMetlId: 2
+    Txn_Year:
+      position:
+        x: 160
+        "y": 0
+      tempMetlId: 3
+    calculate_Trxn_Bank:
+      position:
+        x: 160
+        "y": 120
+      tempMetlId: 4
+    next_year_amount:
+      position:
+        x: -10
+        "y": 250
+      tempMetlId: 5
+    Previous_year_trxn:
+      position:
+        x: 160
+        "y": 240
+      tempMetlId: 6
+    Aggregate_Bank:
+      position:
+        x: 320
+        "y": 120
+      tempMetlId: 7
+    calculate_balance:
+      position:
+        x: 480
+        "y": 120
+      tempMetlId: 8
+    Rename:
+      position:
+        x: 640
+        "y": 120
+      tempMetlId: 9
+    Rounding off Balance:
+      position:
+        x: 800
+        "y": 120
+      tempMetlId: 10
+    Aggregate:
+      position:
+        x: 320
+        "y": 0
+      tempMetlId: 11
+    Convert Type Date to Time_Stamp:
+      position:
+        x: 160
+        "y": -260
+      tempMetlId: 12
+    Rewrite Table:
+      position:
+        x: 960
+        "y": 120
+      tempMetlId: 13

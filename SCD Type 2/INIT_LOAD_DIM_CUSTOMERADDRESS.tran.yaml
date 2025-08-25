@@ -1,0 +1,52 @@
+type: "transformation"
+version: "1.0"
+pipeline:
+  components:
+    MS_CUSTOMERADDRESS Table:
+      type: "table-input"
+      parameters:
+        componentName: "MS_CUSTOMERADDRESS Table"
+        database: "[Environment Default]"
+        schema: "SRC"
+        targetTable: "MS_CUSTOMERADDRESS"
+        columnNames:
+        - "CUSTOMERID"
+        - "ADDRESSID"
+        - "ADDRESSTYPE"
+        - "ROWGUID"
+        - "MODIFIEDDATE"
+        - "MATILLION_BATCH_ID"
+        - "MATILLION_UPDATED_TIMESTAMP"
+        timeOffset: ""
+    DIM_CUSTOMERADDRESS:
+      type: "table-output"
+      sources:
+      - "MS_CUSTOMERADDRESS Table"
+      parameters:
+        componentName: "DIM_CUSTOMERADDRESS"
+        warehouse: "[Environment Default]"
+        database: "[Environment Default]"
+        schema: "[Environment Default]"
+        targetTable: "DIM_CUSTOMERADDRESS"
+        fixDataTypeMismatches: "No"
+        columnMapping:
+        - - "CUSTOMERID"
+          - "CUSTOMERID"
+        - - "ADDRESSID"
+          - "ADDRESSID"
+        - - "ADDRESSTYPE"
+          - "ADDRESSTYPE"
+        orderBy:
+        outputMode: "Append"
+design:
+  components:
+    MS_CUSTOMERADDRESS Table:
+      position:
+        x: 217
+        "y": 121
+      tempMetlId: 7874
+    DIM_CUSTOMERADDRESS:
+      position:
+        x: 416
+        "y": 128
+      tempMetlId: 7896

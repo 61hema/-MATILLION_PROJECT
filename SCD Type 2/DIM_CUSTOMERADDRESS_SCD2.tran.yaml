@@ -1,0 +1,305 @@
+type: "transformation"
+version: "1.0"
+pipeline:
+  components:
+    MS_CUSTOMERADDRESS Table:
+      type: "table-input"
+      parameters:
+        componentName: "MS_CUSTOMERADDRESS Table"
+        database: "[Environment Default]"
+        schema: "SRC"
+        targetTable: "MS_CUSTOMERADDRESS"
+        columnNames:
+        - "CUSTOMERID"
+        - "ADDRESSID"
+        - "ADDRESSTYPE"
+        - "ROWGUID"
+        - "MODIFIEDDATE"
+        - "MATILLION_BATCH_ID"
+        - "MATILLION_UPDATED_TIMESTAMP"
+        timeOffset: ""
+    DIM_CUSTOMERADDRESS Table:
+      type: "table-input"
+      parameters:
+        componentName: "DIM_CUSTOMERADDRESS Table"
+        database: "[Environment Default]"
+        schema: "[Environment Default]"
+        targetTable: "DIM_CUSTOMERADDRESS"
+        columnNames:
+        - "ADD_KEY"
+        - "CUSTOMERID"
+        - "ADDRESSID"
+        - "ADDRESSTYPE"
+        - "ACTIVE_FLAG"
+        - "EFF_START_DT"
+        - "EFF_END_DT"
+        timeOffset: ""
+    Filter Active Records:
+      type: "filter"
+      sources:
+      - "DIM_CUSTOMERADDRESS Table"
+      parameters:
+        componentName: "Filter Active Records"
+        filterConditions:
+        - - "ACTIVE_FLAG"
+          - "Is"
+          - "Equal to"
+          - "Y"
+        combineCondition: "AND"
+    Detect Changes In Address:
+      type: "detect-changes"
+      sources:
+      - "Filter Active Records"
+      - "MS_CUSTOMERADDRESS Table"
+      parameters:
+        componentName: "Detect Changes In Address"
+        masterTable: "Filter Active Records"
+        matchKeys:
+        - "CUSTOMERID"
+        - "ADDRESSID"
+        compareColumns:
+        - "ADDRESSTYPE"
+        outputColumnMapping:
+        - - "compare_ADDRESSTYPE"
+          - "AddressType"
+        - - "compare_CUSTOMERID"
+          - "CustomerID"
+        - - "compare_ADDRESSID"
+          - "AddressId"
+        - - "master_ADD_KEY"
+          - "Addr_key"
+        indicatorColumn: "Indicator"
+    Replicate 0:
+      type: "unknown-transformation"
+      sources:
+      - "Detect Changes In Address"
+      parameters:
+        "1": "Replicate 0"
+    Filter Delete Records:
+      type: "filter"
+      sources:
+      - "Replicate 0"
+      parameters:
+        componentName: "Filter Delete Records"
+        filterConditions:
+        - - "Indicator"
+          - "Is"
+          - "Equal to"
+          - "D"
+        combineCondition: "AND"
+    Filter Insert & Changed Records:
+      type: "filter"
+      sources:
+      - "Replicate 0"
+      parameters:
+        componentName: "Filter Insert & Changed Records"
+        filterConditions:
+        - - "Indicator"
+          - "Is"
+          - "Equal to"
+          - "C"
+        - - "Indicator"
+          - "Is"
+          - "Equal to"
+          - "N"
+        combineCondition: "OR"
+    Filter Changed Records:
+      type: "filter"
+      sources:
+      - "Replicate 0"
+      parameters:
+        componentName: "Filter Changed Records"
+        filterConditions:
+        - - "Indicator"
+          - "Is"
+          - "Equal to"
+          - "C"
+        combineCondition: "AND"
+    DIM_CUSTOMERADDRESS:
+      type: "table-update"
+      sources:
+      - "Active Flag Calculations For Deleted Records"
+      parameters:
+        componentName: "DIM_CUSTOMERADDRESS"
+        warehouse: "[Environment Default]"
+        database: "[Environment Default]"
+        schema: "[Environment Default]"
+        targetTable: "DIM_CUSTOMERADDRESS"
+        targetAlias: "target"
+        sourceAlias: "input"
+        joinExpression:
+        - - "\"target\".\"ADD_KEY\" = \"input\".\"Addr_key\""
+          - "Join"
+        whenMatched:
+        - - "<none>"
+          - "Update"
+        updateMapping:
+        - - "CUSTOMERID"
+          - "CUSTOMERID"
+        - - "ADDRESSID"
+          - "ADDRESSID"
+        - - "FLAG"
+          - "ACTIVE_FLAG"
+        - - "CURR_DATE"
+          - "EFF_END_DT"
+        includeNotMatched: "No"
+    Active Flag Calculations For Deleted Records:
+      type: "calculator"
+      sources:
+      - "Filter Delete Records"
+      parameters:
+        componentName: "Active Flag Calculations For Deleted Records"
+        includeInputColumns: "Yes"
+        calculations:
+        - - "CURRENT_DATE()"
+          - "CURR_DATE"
+        - - "'D'"
+          - "FLAG"
+    DIM_CUSTOMERADDRESS_1:
+      type: "table-output"
+      sources:
+      - "Active Flag Calculation for Y"
+      parameters:
+        componentName: "DIM_CUSTOMERADDRESS_1"
+        warehouse: "[Environment Default]"
+        database: "[Environment Default]"
+        schema: "[Environment Default]"
+        targetTable: "DIM_CUSTOMERADDRESS"
+        fixDataTypeMismatches: "No"
+        columnMapping:
+        - - "CustomerID"
+          - "CUSTOMERID"
+        - - "AddressId"
+          - "ADDRESSID"
+        - - "AddressType"
+          - "ADDRESSTYPE"
+        - - "FLAG"
+          - "ACTIVE_FLAG"
+        orderBy:
+        outputMode: "Append"
+    DIM_CUSTOMERADDRESS 2:
+      type: "table-update"
+      sources:
+      - "Active Flag Calculation for New Records"
+      parameters:
+        componentName: "DIM_CUSTOMERADDRESS 2"
+        warehouse: "[Environment Default]"
+        database: "[Environment Default]"
+        schema: "[Environment Default]"
+        targetTable: "DIM_CUSTOMERADDRESS"
+        targetAlias: "target"
+        sourceAlias: "input"
+        joinExpression:
+        - - "\"target\".\"ADD_KEY\" = \"input\".\"Addr_key\""
+          - "Join"
+        whenMatched:
+        - - "<none>"
+          - "Update"
+        updateMapping:
+        - - "CustomerID"
+          - "CUSTOMERID"
+        - - "AddressId"
+          - "ADDRESSID"
+        - - "Addr_key"
+          - "ADD_KEY"
+        - - "CURR_DATE"
+          - "EFF_END_DT"
+        - - "FLAG"
+          - "ACTIVE_FLAG"
+        includeNotMatched: "No"
+    Active Flag Calculation for New Records:
+      type: "calculator"
+      sources:
+      - "Filter Changed Records"
+      parameters:
+        componentName: "Active Flag Calculation for New Records"
+        includeInputColumns: "Yes"
+        calculations:
+        - - "CURRENT_DATE()"
+          - "CURR_DATE"
+        - - "'N'"
+          - "FLAG"
+    Active Flag Calculation for Y:
+      type: "calculator"
+      sources:
+      - "Filter Insert & Changed Records"
+      parameters:
+        componentName: "Active Flag Calculation for Y"
+        includeInputColumns: "Yes"
+        calculations:
+        - - "CURRENT_DATE()"
+          - "CURR_DATE"
+        - - "'Y'"
+          - "FLAG"
+design:
+  components:
+    MS_CUSTOMERADDRESS Table:
+      position:
+        x: -80
+        "y": 208
+      tempMetlId: 7955
+    DIM_CUSTOMERADDRESS Table:
+      position:
+        x: -80
+        "y": 100
+      tempMetlId: 7984
+    Filter Active Records:
+      position:
+        x: 128
+        "y": 96
+      tempMetlId: 8006
+    Detect Changes In Address:
+      position:
+        x: 288
+        "y": 208
+      tempMetlId: 8055
+    Replicate 0:
+      position:
+        x: 496
+        "y": 208
+      tempMetlId: 8156
+    Filter Delete Records:
+      position:
+        x: 672
+        "y": 64
+      tempMetlId: 8179
+    Filter Insert & Changed Records:
+      position:
+        x: 736
+        "y": 208
+      tempMetlId: 8181
+    Filter Changed Records:
+      position:
+        x: 688
+        "y": 320
+      tempMetlId: 8183
+    DIM_CUSTOMERADDRESS:
+      position:
+        x: 1056
+        "y": 64
+      tempMetlId: 8328
+    Active Flag Calculations For Deleted Records:
+      position:
+        x: 864
+        "y": 64
+      tempMetlId: 8392
+    DIM_CUSTOMERADDRESS_1:
+      position:
+        x: 1056
+        "y": 208
+      tempMetlId: 8458
+    DIM_CUSTOMERADDRESS 2:
+      position:
+        x: 1072
+        "y": 320
+      tempMetlId: 8501
+    Active Flag Calculation for New Records:
+      position:
+        x: 864
+        "y": 320
+      tempMetlId: 8566
+    Active Flag Calculation for Y:
+      position:
+        x: 896
+        "y": 208
+      tempMetlId: 8679
